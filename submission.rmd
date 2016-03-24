@@ -1,0 +1,269 @@
+---
+title: "Kaggle Competition - Titanic: Machine Learning from Disaster"
+author: "Paulo Cardoso"
+date: "February 20, 2016"
+output: pdf_document
+---
+
+# Overview
+
+This competition aims to Predict survival on the Titanic, in this case using R. This challenge was proposed by Kaggle, an social web hub for Data Scientists. The tragedy that hapened with the Titanic is one of the most infamous shipwrecks in history.  On April 15, 1912, during her maiden voyage, the Titanic sank after colliding with an iceberg, killing 1502 out of 2224 passengers and crew.
+
+The data used in this report were provided by the organizer of competition Kaggle, and are available on this link (https://www.kaggle.com/c/titanic/data). This data is composed of 4 files, 2 major (train.csv and test.CSV) that will be used in the prediction.
+
+# Set up
+
+Loading the external libraries and the data.
+```{r echo=TRUE, cache=TRUE}
+# Loading libraries
+# library(datasets)
+
+# Loading the data
+train <- read.csv("train.csv", header = TRUE, stringsAsFactors = FALSE)
+test <- read.csv("test.csv", header = TRUE, stringsAsFactors = FALSE)
+
+# Fixing valoues and transforming to factors
+#   train$Survived <- factor(train$Survived, levels=c(1,0))
+#   levels(train$Survived) <- c("Survived", "Died")
+#   train$Pclass <- as.factor(train$Pclass)
+#   levels(train$Pclass) <- c("1st Class", "2nd Class", "3rd Class")
+#   train$Gender <- factor(train$Sex, levels=c("female", "male"))
+#   levels(train$Gender) <- c("Female", "Male")
+``` 
+
+# Exploratory Data Analyses
+
+In order to understand the data set is necessary that a few metrics be presented.
+
+I)Presenting the struture of the train dataset.
+```{r echo=TRUE, cache=TRUE}
+# Struture presentation
+str(train)
+``` 
+II)Display the amount of rows.
+```{r echo=TRUE, cache=TRUE}
+# Number of rows
+nrow(train)
+nrow(test)
+```
+III)Display the first six rows of train.
+```{r echo=TRUE, cache=TRUE}
+# Head of the dataset
+head(train)
+```
+IV)Display the last six rows of test.
+```{r echo=TRUE, cache=TRUE}
+# Tail of the dataset
+tail(test)
+```
+V) Presenting the summary of the train dataset.
+```{r echo=TRUE, cache=TRUE}
+# Summary
+summary(train)
+```
+VI) Mosaic plot presenting the distribution between Dead and Survival by Class and the probabity of survival for each person by Class.
+```{r echo=TRUE, cache=TRUE}
+# Mosaicplot
+mosaicplot(train$Pclass ~ train$Survived, main="Passenger Survival by Class",
+           color=c("#8dd3c7", "#fb8072"), shade=FALSE,  xlab="", ylab="",
+           off=c(0), cex.axis=1.4)
+
+# Probability of sufvival by Class
+prop.table(table(train$Pclass, train$Survived), 1)*100
+```
+VII) Mosaic plot presenting the distribution between Dead and Survival by Genderand the probabity of survival for each person by Gender.
+```{r echo=TRUE, cache=TRUE}
+# Mosaicplot
+mosaicplot(train$Gender ~ train$Survived, main="Passenger Survival by Gender",
+           color=c("#8dd3c7", "#fb8072"), shade=FALSE,  xlab="", ylab="",
+           off=c(0), cex.axis=1.4)
+
+# Probability of sufvival by Gender
+prop.table(table(train$Sex, train$Survived), 1)*100
+```
+
+# Data Cleaning
+
+On this step of the project the data used for creation of the model need to be cleaned, for example missing value variables. And the variables that will not be used are removed from the "train" dataset. The variables removed are: PassengerID, Ticket, Fare, Cabin, and Embarked.
+```{r echo=TRUE, cache=TRUE}
+# Removing variables
+ctrain = train[-c(1,9:12)]
+```
+Replace the content of the variable Gender(Male/Female) for (0/1) in order to fit to our model.
+```{r echo=TRUE, cache=TRUE}
+# Replacing variable Gender Value
+ctrain$Sex = gsub("female", 1, train$Sex)
+ctrain$Sex = gsub("^male", 0, train$Sex)
+```
+Then in order to fix the missing values on the Age variable we try inference this missing values assuming that Mrs.X will older than Ms.X. Moreover, we're (naively) assuming that people with the same titles are closer together in age.
+```{r echo=TRUE, cache=TRUE}
+master_vector = grep("Master.",ctrain$Name, fixed=TRUE)
+miss_vector = grep("Miss.", ctrain$Name, fixed=TRUE)
+mrs_vector = grep("Mrs.", ctrain$Name, fixed=TRUE)
+mr_vector = grep("Mr.", ctrain$Name, fixed=TRUE)
+dr_vector = grep("Dr.", ctrain$Name, fixed=TRUE)
+
+for(i in master_vector) {
+  ctrain$Name[i] = "Master"
+}
+for(i in miss_vector) {
+  ctrain$Name[i] = "Miss"
+}
+for(i in mrs_vector) {
+  ctrain$Name[i] = "Mrs"
+}
+for(i in mr_vector) {
+  ctrain$Name[i] = "Mr"
+}
+for(i in dr_vector) {
+  ctrain$Name[i] = "Dr"
+}
+```
+Another step in order to normalize the Age variable is replace the missing values with the average age for all passangers with the same group title.
+```{r echo=TRUE, cache=TRUE}
+master_age = round(mean(ctrain$Age[ctrain$Name == "Master"], na.rm = TRUE), digits = 2)
+miss_age = round(mean(ctrain$Age[ctrain$Name == "Miss"], na.rm = TRUE), digits =2)
+mrs_age = round(mean(ctrain$Age[ctrain$Name == "Mrs"], na.rm = TRUE), digits = 2)
+mr_age = round(mean(ctrain$Age[ctrain$Name == "Mr"], na.rm = TRUE), digits = 2)
+dr_age = round(mean(ctrain$Age[ctrain$Name == "Dr"], na.rm = TRUE), digits = 2)
+ 
+for (i in 1:nrow(ctrain)) {
+  if (is.na(ctrain[i,5])) {
+    if (ctrain$Name[i] == "Master") {
+      ctrain$Age[i] = master_age
+    } else if (ctrain$Name[i] == "Miss") {
+      ctrain$Age[i] = miss_age
+    } else if (ctrain$Name[i] == "Mrs") {
+      ctrain$Age[i] = mrs_age
+    } else if (ctrain$Name[i] == "Mr") {
+      ctrain$Age[i] = mr_age
+    } else if (ctrain$Name[i] == "Dr") {
+      ctrain$Age[i] = dr_age
+    } else {
+      print("Uncaught Title")
+    }
+  }
+}
+```
+Strengthening the model by creating new variables we may be able to predict the survival of the passengers even more closely. 
+We start by creating a child variable. This is done by appending an empty column to the dataset, titled "Child".We then populate the column with value "1", if the passenger is under the age of 12, and "2" otherwise.
+```{r echo=TRUE, cache=TRUE}
+#ctrain["Child"]
+for (i in 1:nrow(ctrain)) {
+  if (ctrain$Age[i] <= 12) {
+    ctrain$Child[i] = 1
+  } else {
+    ctrain$Child[i] = 2
+  }
+}
+```
+With the intention of determining the size of the family of each passenger by adding the number of Siblings/Spouses and Parents/Children (we add 1 so minimum becomes 1). And thereby creating a variable Familia he ought to contain the amount of families each passenger, this variable will be used in the comparison of propabilidade of survival based on the size of the family.
+```{r echo=TRUE, cache=TRUE}
+ctrain["Family"] = NA
+ 
+for(i in 1:nrow(ctrain)) {
+  x = ctrain$SibSp[i]
+  y = ctrain$Parch[i]
+  ctrain$Family[i] = x + y + 1
+}
+```
+Another variable added to the dataset in order to enrich the quality of the information present is the variable Mother. Which is the variable that will signal whether the passenger is a mother or not, the values 1 and 2.
+```{r echo=TRUE, cache=TRUE}
+for(i in 1:nrow(ctrain)) {
+  if(ctrain$Name[i] == "Mrs" & ctrain$Parch[i] > 0) {
+    ctrain$Mother[i] = 1
+  } else {
+    ctrain$Mother[i] = 2
+  }
+}
+```
+On this step the same cleaning strategy is used on the test dataset.
+```{r echo=TRUE, cache=TRUE}
+#PassId = test[1]
+test = test[-c(1, 8:11)]
+ 
+test$Sex = gsub("female", 1, test$Sex)
+test$Sex = gsub("^male", 0, test$Sex)
+ 
+test_master_vector = grep("Master.",test$Name)
+test_miss_vector = grep("Miss.", test$Name)
+test_mrs_vector = grep("Mrs.", test$Name)
+test_mr_vector = grep("Mr.", test$Name)
+test_dr_vector = grep("Dr.", test$Name)
+ 
+for(i in test_master_vector) {
+  test[i, 2] = "Master"
+}
+for(i in test_miss_vector) {
+  test[i, 2] = "Miss"
+}
+for(i in test_mrs_vector) {
+  test[i, 2] = "Mrs"
+}
+for(i in test_mr_vector) {
+  test[i, 2] = "Mr"
+}
+for(i in test_dr_vector) {
+  test[i, 2] = "Dr"
+}
+ 
+test_master_age = round(mean(test$Age[test$Name == "Master"], na.rm = TRUE), digits = 2)
+test_miss_age = round(mean(test$Age[test$Name == "Miss"], na.rm = TRUE), digits =2)
+test_mrs_age = round(mean(test$Age[test$Name == "Mrs"], na.rm = TRUE), digits = 2)
+test_mr_age = round(mean(test$Age[test$Name == "Mr"], na.rm = TRUE), digits = 2)
+test_dr_age = round(mean(test$Age[test$Name == "Dr"], na.rm = TRUE), digits = 2)
+ 
+for (i in 1:nrow(test)) {
+  if (is.na(test[i,4])) {
+    if (test[i, 2] == "Master") {
+      test[i, 4] = test_master_age
+    } else if (test[i, 2] == "Miss") {
+      test[i, 4] = test_miss_age
+    } else if (test[i, 2] == "Mrs") {
+      test[i, 4] = test_mrs_age
+    } else if (test[i, 2] == "Mr") {
+      test[i, 4] = test_mr_age
+    } else if (test[i, 2] == "Dr") {
+      test[i, 4] = test_dr_age
+    } else {
+      print(paste("Uncaught title at: ", i, sep=""))
+      print(paste("The title unrecognized was: ", testData[i,2], sep=""))
+    }
+  }
+}
+ 
+#We do a manual replacement here, because we weren't able to programmatically figure out the title.
+#We figured out it was 89 because the above print statement should have warned us.
+test[89, 4] = test_miss_age
+ 
+test["Child"] = NA
+ 
+for (i in 1:nrow(test)) {
+  if (test[i, 4] <= 12) {
+    test[i, 7] = 1
+  } else {
+    test[i, 7] = 1
+  }
+}
+ 
+test["Family"] = NA
+ 
+for(i in 1:nrow(test)) {
+  test[i, 8] = test[i, 5] + test[i, 6] + 1
+}
+ 
+test["Mother"] = NA
+ 
+for(i in 1:nrow(test)) {
+  if(test[i, 2] == "Mrs" & test[i, 6] > 0) {
+    test[i, 9] = 1
+  } else {
+    test[i, 9] = 2
+  }
+}
+```
+
+
+
+
+
